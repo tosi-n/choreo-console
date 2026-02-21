@@ -1,0 +1,23 @@
+services:
+  choreo:
+    image: ${CHOREO_IMAGE:-ghcr.io/tosi-n/choreo:0.1.4}
+    platform: linux/amd64
+    environment:
+      - CHOREO__DATABASE__TYPE=sqlite
+      - CHOREO__DATABASE__PATH=/data/choreo.db
+      - CHOREO__SERVER__HOST=0.0.0.0
+      - CHOREO__SERVER__PORT=8080
+    ports:
+      - "${CHOREO_SERVER_PORT:-8080}:8080"
+    volumes:
+      - choreo-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  choreo-data:
+
