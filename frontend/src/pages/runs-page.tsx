@@ -16,22 +16,81 @@ export function RunsPage() {
   }
 
   return (
-    <section className="page">
-      <h1>Runs</h1>
-      <p className="hint">
-        Runs list depends on the upcoming <code>GET /runs</code> endpoint. You can inspect a run by ID
-        now.
-      </p>
-      <form className="card form-inline" onSubmit={onSubmit}>
-        <label htmlFor="run-id-input">Run ID</label>
+    <section className="control-page">
+      <header className="page-toolbar">
+        <h1>Runs</h1>
+        <div className="toolbar-actions">
+          <button className="ghost-btn" type="button">
+            Refresh runs
+          </button>
+        </div>
+      </header>
+
+      <form className="filter-row" onSubmit={onSubmit}>
         <input
           id="run-id-input"
           value={runId}
           onChange={(event) => setRunId(event.target.value)}
-          placeholder="UUID"
+          placeholder="Run ID (quick open)"
         />
-        <button type="submit">Open Run</button>
+        <button className="filter-pill" type="button">
+          Queued at
+        </button>
+        <button className="filter-pill active" type="button">
+          Last 3d
+        </button>
+        <button className="filter-pill" type="button">
+          Status: All
+        </button>
+        <button className="filter-pill" type="button">
+          App: All
+        </button>
+        <button className="mini-btn" type="submit">
+          Open Run
+        </button>
       </form>
+
+      <article className="panel">
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>Run ID</th>
+                <th>Trigger</th>
+                <th>Function</th>
+                <th>Queued at</th>
+                <th>Ended at</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colSpan={6}>
+                  <div className="table-empty">
+                    <p>No results were found.</p>
+                    <p className="subtle">
+                      Waiting on backend <code>GET /runs</code> endpoint.
+                    </p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <aside className="side-note">
+        <h3>Table columns</h3>
+        <ul>
+          <li>Status</li>
+          <li>Run ID</li>
+          <li>Trigger</li>
+          <li>Function</li>
+          <li>Queued at</li>
+          <li>Ended at</li>
+        </ul>
+      </aside>
     </section>
   )
 }
+
