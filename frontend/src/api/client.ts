@@ -27,6 +27,22 @@ function ensureTrailingSlash(value: string): string {
   return value.endsWith('/') ? value : `${value}/`
 }
 
+function isAbsoluteHttpUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value)
+}
+
+function buildRequestUrl(baseUrl: string, path: string): string {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+
+  if (isAbsoluteHttpUrl(baseUrl)) {
+    const absolute = new URL(normalizedPath.replace(/^\//, ''), ensureTrailingSlash(baseUrl))
+    return absolute.toString()
+  }
+
+  const normalizedBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
+  return `${normalizedBase}${normalizedPath}`
+}
+
 async function parseResponseJson(response: Response): Promise<unknown> {
   try {
     return (await response.json()) as unknown
@@ -41,15 +57,14 @@ function parseErrorMessage(payload: unknown): string {
 }
 
 export function createChoreoClient(options: ChoreoClientOptions = {}) {
-  const baseUrl = options.baseUrl ?? import.meta.env.VITE_CHOREO_BASE_URL ?? 'http://localhost:8080'
-  const base = ensureTrailingSlash(baseUrl)
+  const baseUrl = options.baseUrl ?? import.meta.env.VITE_CHOREO_BASE_URL ?? '/api'
 
   async function request<T>(
     path: string,
     init: RequestInit,
     schema: z.ZodType<T>,
   ): Promise<T> {
-    const url = new URL(path.replace(/^\//, ''), base)
+    const url = buildRequestUrl(baseUrl, path)
     const response = await fetch(url, {
       headers: {
         'Content-Type': 'application/json',
@@ -83,4 +98,3 @@ export function createChoreoClient(options: ChoreoClientOptions = {}) {
 export const choreoClient = createChoreoClient()
 
 export type { HealthResponse, RunResponse, StepResponse }
-

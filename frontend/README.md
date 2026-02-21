@@ -19,7 +19,13 @@ npm run dev
 
 Default backend URL:
 
-- `VITE_CHOREO_BASE_URL=http://localhost:8080`
+- `VITE_CHOREO_BASE_URL=/api` (recommended for local dev via Vite proxy)
+
+Notes:
+
+- The Vite dev server proxies `/api/*` to `http://localhost:8080`.
+- This avoids browser CORS issues when Choreo is running without CORS headers.
+- If you need direct access to another environment, set an absolute URL instead.
 
 ## Current Routes
 
