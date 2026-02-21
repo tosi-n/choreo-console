@@ -20,6 +20,8 @@ npm run dev
 Default backend URL:
 
 - `VITE_CHOREO_BASE_URL=/api` (recommended for local dev via Vite proxy)
+- `VITE_STIMULIR_BASE_URL=http://localhost:8000/api/v1` (optional, for historical run data)
+- `VITE_STIMULIR_AUTH_TOKEN=` (optional; required for authenticated Stimulir endpoints)
 
 Notes:
 
@@ -47,3 +49,4 @@ Notes:
 Current backend note (`ghcr.io/tosi-n/choreo:0.1.4`):
 
 - Run and event list endpoints (`GET /runs`, `GET /events`) are not exposed in this image.
+- For real historical run rows, use Stimulir endpoints (`GET /api/v1/admin/traces`, `GET /api/v1/worker/status`) with auth token.

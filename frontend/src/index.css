@@ -266,12 +266,21 @@ input {
 }
 
 .filter-row input {
-  min-width: 240px;
-  max-width: 380px;
+  min-width: 220px;
+  flex: 1 1 240px;
+  max-width: 420px;
   border: 1px solid var(--border);
   background: #090d12;
   border-radius: 8px;
   padding: 0.44rem 0.65rem;
+}
+
+.filter-select {
+  border: 1px solid var(--border);
+  background: #090d12;
+  border-radius: 8px;
+  padding: 0.44rem 0.65rem;
+  min-width: 150px;
 }
 
 .filter-pill.active {
@@ -293,6 +302,41 @@ input {
 
 .status-strip strong {
   color: #f2f6fd;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.48rem;
+  border-radius: 999px;
+  font-size: 0.77rem;
+  border: 1px solid var(--border);
+  text-transform: capitalize;
+}
+
+.status-pill.completed {
+  color: #89d8b0;
+  border-color: #2c7f56;
+  background: #10271d;
+}
+
+.status-pill.running {
+  color: #9fbdf1;
+  border-color: #335a9c;
+  background: #13213b;
+}
+
+.status-pill.failed {
+  color: #f3a4a4;
+  border-color: #8f3434;
+  background: #311616;
+}
+
+.status-pill.cancelled,
+.status-pill.neutral {
+  color: #d0dae7;
+  border-color: #3c4a5c;
+  background: #18202a;
 }
 
 .callout-error {
@@ -524,6 +568,12 @@ input {
   gap: 0.28rem;
 }
 
+.run-link {
+  color: #91baff;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .side-note {
   border: 1px solid var(--border);
   background: var(--panel);
@@ -666,6 +716,27 @@ input {
   margin: 0;
 }
 
+.token-row {
+  padding: 0.82rem;
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.token-row input {
+  min-width: 280px;
+  flex: 1 1 420px;
+  border: 1px solid var(--border);
+  background: #0a1017;
+  border-radius: 8px;
+  padding: 0.5rem 0.62rem;
+  color: var(--text);
+}
+
+.token-hint {
+  margin: 0 0.82rem 0.82rem;
+}
+
 @media (max-width: 1260px) {
   .console-shell {
     grid-template-columns: 204px minmax(0, 1fr);
@@ -751,6 +822,12 @@ input {
     min-width: 0;
     width: 100%;
     max-width: none;
+    flex: 1 1 100%;
+  }
+
+  .filter-select {
+    width: 100%;
+    min-width: 0;
   }
 
   .compact-list li {
@@ -770,6 +847,11 @@ input {
 
   .donut {
     width: min(70vw, 220px);
+  }
+
+  .token-row input {
+    min-width: 0;
+    flex: 1 1 100%;
   }
 
   .data-table th,

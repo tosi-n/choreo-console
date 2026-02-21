@@ -60,9 +60,55 @@ export const sendEventResponseSchema = z.object({
   run_ids: z.array(z.string().uuid()),
 })
 
+export const stimulirTraceSchema = z.object({
+  id: z.string(),
+  task_id: z.string().nullable().optional(),
+  durable_session_id: z.string().nullable().optional(),
+  business_profile_id: z.string().nullable().optional(),
+  model_name: z.string().nullable().optional(),
+  model_provider: z.string().nullable().optional(),
+  title: z.string().nullable().optional(),
+  context_type: z.string().nullable().optional(),
+  prompt_key: z.string().nullable().optional(),
+  prompt_version: z.number().nullable().optional(),
+  status: z.string(),
+  error_message: z.string().nullable().optional(),
+  started_at: z.string(),
+  completed_at: z.string().nullable().optional(),
+  duration_ms: z.number().nullable().optional(),
+  input_tokens: z.number().nullable().optional(),
+  output_tokens: z.number().nullable().optional(),
+  total_tokens: z.number().nullable().optional(),
+  created_at: z.string(),
+})
+
+export const stimulirTracesResponseSchema = z.array(stimulirTraceSchema)
+
+export const stimulirWorkerStatusSchema = z.object({
+  tasks_queued: z.number(),
+  tasks_executing: z.number(),
+  tasks_researched: z.number(),
+  tasks_failed: z.number(),
+  tasks_runnable: z.number(),
+  orchestrator: z.string(),
+  worker_running: z.boolean(),
+  worker_last_tick: z.string().nullable().optional(),
+  worker_last_error: z.string().nullable().optional(),
+})
+
+export const stimulirTraceDetailSchema = z.object({
+  trace: stimulirTraceSchema.optional(),
+  messages: z.array(z.unknown()).optional(),
+  tool_calls: z.array(z.unknown()).optional(),
+  debug_logs: z.array(z.unknown()).optional(),
+})
+
 export type HealthResponse = z.infer<typeof healthResponseSchema>
 export type RunResponse = z.infer<typeof runResponseSchema>
 export type StepResponse = z.infer<typeof stepResponseSchema>
 export type FunctionDefinition = z.infer<typeof functionDefinitionSchema>
 export type FunctionTrigger = z.infer<typeof functionTriggerSchema>
 export type SendEventResponse = z.infer<typeof sendEventResponseSchema>
+export type StimulirTrace = z.infer<typeof stimulirTraceSchema>
+export type StimulirTraceDetail = z.infer<typeof stimulirTraceDetailSchema>
+export type StimulirWorkerStatus = z.infer<typeof stimulirWorkerStatusSchema>

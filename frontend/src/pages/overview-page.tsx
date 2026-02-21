@@ -1,12 +1,23 @@
 import type { CSSProperties } from 'react'
+import { useMemo } from 'react'
 
 import { choreoClient } from '../api/client'
 import { useFunctionsQuery } from '../features/functions/queries'
 import { useHealthQuery } from '../features/health/queries'
+import { useStimulirTracesQuery, useStimulirWorkerStatusQuery } from '../features/stimulir/queries'
+import { getInitialStimulirToken } from '../lib/stimulir-auth'
 
 export function OverviewPage() {
   const health = useHealthQuery()
   const functions = useFunctionsQuery()
+  const stimulirToken = getInitialStimulirToken()
+  const traces = useStimulirTracesQuery({
+    token: stimulirToken,
+    status: 'all',
+    modelProvider: 'all',
+    limit: 100,
+  })
+  const workerStatus = useStimulirWorkerStatusQuery(stimulirToken)
 
   const healthStatus = health.isSuccess ? health.data.status : 'unreachable'
   const databaseStatus = health.isSuccess ? health.data.database : 'unknown'
@@ -27,17 +38,53 @@ export function OverviewPage() {
   )
   const totalTriggers = eventTriggerCount + scheduleTriggerCount + otherTriggerCount
 
-  const eventPercent = totalTriggers > 0 ? (eventTriggerCount / totalTriggers) * 100 : 34
-  const schedulePercent = totalTriggers > 0 ? (scheduleTriggerCount / totalTriggers) * 100 : 67
-  const eventEnd = `${eventPercent.toFixed(2)}%`
-  const scheduleEnd = `${(eventPercent + schedulePercent).toFixed(2)}%`
+  const traceStats = useMemo(() => {
+    const data = traces.data ?? []
+    const stats = {
+      total: data.length,
+      completed: 0,
+      running: 0,
+      failed: 0,
+      other: 0,
+    }
+
+    for (const trace of data) {
+      const status = trace.status.toLowerCase()
+      if (status === 'completed') {
+        stats.completed += 1
+      } else if (status === 'running') {
+        stats.running += 1
+      } else if (status === 'failed') {
+        stats.failed += 1
+      } else {
+        stats.other += 1
+      }
+    }
+
+    return stats
+  }, [traces.data])
+
+  const primaryTotal = stimulirToken ? traceStats.total : totalTriggers
+  const segmentA = primaryTotal > 0 ? ((stimulirToken ? traceStats.completed : eventTriggerCount) / primaryTotal) * 100 : 34
+  const segmentBValue = primaryTotal > 0 ? ((stimulirToken ? traceStats.running : scheduleTriggerCount) / primaryTotal) * 100 : 33
+  const segmentAEnd = `${segmentA.toFixed(2)}%`
+  const segmentBEnd = `${(segmentA + segmentBValue).toFixed(2)}%`
+
+  function refreshPageData() {
+    void health.refetch()
+    void functions.refetch()
+    if (stimulirToken) {
+      void traces.refetch()
+      void workerStatus.refetch()
+    }
+  }
 
   return (
     <section className="control-page">
       <header className="page-toolbar">
         <h1>Metrics</h1>
         <div className="toolbar-actions">
-          <button className="ghost-btn" type="button" onClick={() => health.refetch()}>
+          <button className="ghost-btn" type="button" onClick={refreshPageData}>
             Refresh page
           </button>
           <button className="icon-btn" type="button" aria-label="settings">
@@ -68,6 +115,10 @@ export function OverviewPage() {
         <span>
           Database <strong>{databaseStatus}</strong>
         </span>
+        <span>
+          Runs source{' '}
+          <strong>{stimulirToken ? choreoClient.config.stimulirBaseUrl : 'configure Stimulir token in Runs tab'}</strong>
+        </span>
       </div>
 
       {health.isError && (
@@ -79,49 +130,94 @@ export function OverviewPage() {
         <div className="card-grid two-up">
           <article className="panel">
             <header className="panel-header">
-              <h3>Functions Coverage</h3>
+              <h3>{stimulirToken ? 'Run Status Mix' : 'Functions Coverage'}</h3>
             </header>
             <div className="donut-wrap">
-              <div className="donut" style={{ '--seg-a-end': eventEnd, '--seg-b-end': scheduleEnd } as CSSProperties}>
-                <span>Total runs</span>
-                <strong>{totalFunctions}</strong>
+              <div className="donut" style={{ '--seg-a-end': segmentAEnd, '--seg-b-end': segmentBEnd } as CSSProperties}>
+                <span>{stimulirToken ? 'Total runs' : 'Total functions'}</span>
+                <strong>{stimulirToken ? traceStats.total : totalFunctions}</strong>
               </div>
               <ul className="legend-list">
-                <li>Functions {totalFunctions}</li>
-                <li>Event triggers {eventTriggerCount}</li>
-                <li>Schedule triggers {scheduleTriggerCount}</li>
-                <li>Other triggers {otherTriggerCount}</li>
-                <li>Database {databaseStatus}</li>
+                {stimulirToken ? (
+                  <>
+                    <li>Completed {traceStats.completed}</li>
+                    <li>Running {traceStats.running}</li>
+                    <li>Failed {traceStats.failed}</li>
+                    <li>Other {traceStats.other}</li>
+                    <li>Database {databaseStatus}</li>
+                  </>
+                ) : (
+                  <>
+                    <li>Functions {totalFunctions}</li>
+                    <li>Event triggers {eventTriggerCount}</li>
+                    <li>Schedule triggers {scheduleTriggerCount}</li>
+                    <li>Other triggers {otherTriggerCount}</li>
+                    <li>Database {databaseStatus}</li>
+                  </>
+                )}
               </ul>
             </div>
           </article>
           <article className="panel">
             <header className="panel-header">
-              <h3>Registered Functions</h3>
-              <button className="mini-btn" type="button" onClick={() => functions.refetch()}>
+              <h3>{stimulirToken ? 'Recent Runs' : 'Registered Functions'}</h3>
+              <button
+                className="mini-btn"
+                type="button"
+                onClick={() => (stimulirToken ? traces.refetch() : functions.refetch())}
+              >
                 Refresh
               </button>
             </header>
             <div className="overview-list">
-              {functions.isLoading && <p className="subtle">Loading function registry...</p>}
-              {functions.isError && (
-                <p className="subtle">Could not load functions from <code>GET /functions</code>.</p>
-              )}
-              {!functions.isLoading && !functions.isError && totalFunctions === 0 && (
-                <p className="subtle">No registered functions yet.</p>
-              )}
-              {!functions.isLoading && !functions.isError && totalFunctions > 0 && (
-                <ul className="compact-list">
-                  {registeredFunctions.slice(0, 8).map((fn) => (
-                    <li key={fn.id}>
-                      <div>
-                        <strong>{fn.name}</strong>
-                        <p className="subtle">{fn.id}</p>
-                      </div>
-                      <span>{fn.triggers.length} trigger(s)</span>
-                    </li>
-                  ))}
-                </ul>
+              {stimulirToken ? (
+                <>
+                  {traces.isLoading && <p className="subtle">Loading trace runs...</p>}
+                  {traces.isError && (
+                    <p className="subtle">
+                      Could not load <code>GET /api/v1/admin/traces</code>; check token in Runs tab.
+                    </p>
+                  )}
+                  {!traces.isLoading && !traces.isError && traceStats.total === 0 && (
+                    <p className="subtle">No run traces found yet.</p>
+                  )}
+                  {!traces.isLoading && !traces.isError && traceStats.total > 0 && (
+                    <ul className="compact-list">
+                      {(traces.data ?? []).slice(0, 8).map((trace) => (
+                        <li key={trace.id}>
+                          <div>
+                            <strong>{trace.title ?? trace.model_provider ?? trace.id}</strong>
+                            <p className="subtle">{trace.id}</p>
+                          </div>
+                          <span>{trace.status}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              ) : (
+                <>
+                  {functions.isLoading && <p className="subtle">Loading function registry...</p>}
+                  {functions.isError && (
+                    <p className="subtle">Could not load functions from <code>GET /functions</code>.</p>
+                  )}
+                  {!functions.isLoading && !functions.isError && totalFunctions === 0 && (
+                    <p className="subtle">No registered functions yet.</p>
+                  )}
+                  {!functions.isLoading && !functions.isError && totalFunctions > 0 && (
+                    <ul className="compact-list">
+                      {registeredFunctions.slice(0, 8).map((fn) => (
+                        <li key={fn.id}>
+                          <div>
+                            <strong>{fn.name}</strong>
+                            <p className="subtle">{fn.id}</p>
+                          </div>
+                          <span>{fn.triggers.length} trigger(s)</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
               )}
             </div>
           </article>
@@ -133,24 +229,34 @@ export function OverviewPage() {
         <div className="card-grid two-up">
           <article className="panel">
             <header className="panel-header">
-              <h3>Event-triggered Functions</h3>
+              <h3>{stimulirToken ? 'Worker Queue' : 'Event-triggered Functions'}</h3>
             </header>
             <div className="chart-placeholder">
               <div className="metric-stack">
-                <strong>{eventTriggerCount}</strong>
-                <span>Functions listening to events</span>
+                <strong>{stimulirToken ? (workerStatus.data?.tasks_queued ?? '—') : eventTriggerCount}</strong>
+                <span>{stimulirToken ? 'Queued tasks in worker' : 'Functions listening to events'}</span>
               </div>
             </div>
           </article>
           <article className="panel">
             <header className="panel-header">
-              <h3>Endpoint Availability</h3>
+              <h3>{stimulirToken ? 'Worker Execution' : 'Endpoint Availability'}</h3>
             </header>
             <div className="chart-placeholder">
               <div className="metric-stack">
-                <strong>GET /functions</strong>
-                <span>Available in current Choreo build</span>
-                <span className="subtle">Run/Event list endpoints are not exposed by v0.1.4.</span>
+                {stimulirToken ? (
+                  <>
+                    <strong>{workerStatus.data?.tasks_executing ?? '—'}</strong>
+                    <span>Active task executions</span>
+                    <span className="subtle">Failed: {workerStatus.data?.tasks_failed ?? '—'}</span>
+                  </>
+                ) : (
+                  <>
+                    <strong>GET /functions</strong>
+                    <span>Available in current Choreo build</span>
+                    <span className="subtle">Run/Event list endpoints are not exposed by v0.1.4.</span>
+                  </>
+                )}
               </div>
             </div>
           </article>
