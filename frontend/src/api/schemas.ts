@@ -33,7 +33,36 @@ export const stepResponseSchema = z.object({
 
 export const runStepsResponseSchema = z.array(stepResponseSchema)
 
+export const functionTriggerSchema = z.object({
+  type: z.string(),
+  name: z.string().nullable().optional(),
+  schedule: z.string().nullable().optional(),
+})
+
+export const functionDefinitionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  triggers: z.array(functionTriggerSchema),
+  retries: z
+    .object({
+      max_attempts: z.number(),
+    })
+    .nullable()
+    .optional(),
+  timeout_secs: z.number().nullable().optional(),
+  priority: z.number().nullable().optional(),
+})
+
+export const functionsResponseSchema = z.array(functionDefinitionSchema)
+
+export const sendEventResponseSchema = z.object({
+  event_id: z.string().uuid(),
+  run_ids: z.array(z.string().uuid()),
+})
+
 export type HealthResponse = z.infer<typeof healthResponseSchema>
 export type RunResponse = z.infer<typeof runResponseSchema>
 export type StepResponse = z.infer<typeof stepResponseSchema>
-
+export type FunctionDefinition = z.infer<typeof functionDefinitionSchema>
+export type FunctionTrigger = z.infer<typeof functionTriggerSchema>
+export type SendEventResponse = z.infer<typeof sendEventResponseSchema>

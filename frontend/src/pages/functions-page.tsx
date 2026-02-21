@@ -1,19 +1,47 @@
+import { useMemo, useState } from 'react'
+
+import { useFunctionsQuery } from '../features/functions/queries'
+
 export function FunctionsPage() {
+  const [search, setSearch] = useState('')
+  const functions = useFunctionsQuery()
+
+  const filteredFunctions = useMemo(() => {
+    const term = search.trim().toLowerCase()
+    if (!term) {
+      return functions.data ?? []
+    }
+
+    return (functions.data ?? []).filter((fn) => {
+      if (fn.name.toLowerCase().includes(term) || fn.id.toLowerCase().includes(term)) {
+        return true
+      }
+      return fn.triggers.some((trigger) => {
+        const triggerName = trigger.name ?? ''
+        return trigger.type.toLowerCase().includes(term) || triggerName.toLowerCase().includes(term)
+      })
+    })
+  }, [functions.data, search])
+
   return (
     <section className="control-page">
       <header className="page-toolbar">
         <h1>Functions</h1>
         <div className="toolbar-actions">
-          <button className="ghost-btn" type="button">
+          <button className="ghost-btn" type="button" onClick={() => functions.refetch()}>
             Refresh
           </button>
         </div>
       </header>
 
       <div className="filter-row">
-        <input placeholder="Search by function name" />
+        <input
+          placeholder="Search by function name"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+        />
         <button className="filter-pill active" type="button">
-          Status: Active
+          Active: {(functions.data ?? []).length}
         </button>
       </div>
 
@@ -29,24 +57,59 @@ export function FunctionsPage() {
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td colSpan={4}>
-                  <div className="table-empty large">
-                    <p>No functions found</p>
-                    <p className="subtle">
-                      Backend <code>GET /functions</code> is available; data wiring comes next.
-                    </p>
-                    <div className="empty-actions">
-                      <button className="ghost-btn" type="button">
-                        Refresh
-                      </button>
-                      <button className="mini-btn" type="button">
-                        Go to docs
-                      </button>
+              {functions.isLoading && (
+                <tr>
+                  <td colSpan={4}>
+                    <div className="table-empty">
+                      <p>Loading functions...</p>
                     </div>
-                  </div>
-                </td>
-              </tr>
+                  </td>
+                </tr>
+              )}
+              {functions.isError && (
+                <tr>
+                  <td colSpan={4}>
+                    <div className="table-empty">
+                      <p>Could not load functions from <code>GET /functions</code>.</p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              {!functions.isLoading && !functions.isError && filteredFunctions.length === 0 && (
+                <tr>
+                  <td colSpan={4}>
+                    <div className="table-empty">
+                      <p>No matching functions.</p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              {!functions.isLoading &&
+                !functions.isError &&
+                filteredFunctions.map((fn) => (
+                  <tr key={fn.id}>
+                    <td>
+                      <strong>{fn.name}</strong>
+                      <p className="subtle">{fn.id}</p>
+                    </td>
+                    <td>
+                      {fn.triggers.length === 0 ? (
+                        <span className="subtle">None</span>
+                      ) : (
+                        <ul className="inline-list">
+                          {fn.triggers.map((trigger, index) => (
+                            <li key={`${fn.id}-${trigger.type}-${trigger.name ?? trigger.schedule ?? index}`}>
+                              {trigger.type}:{' '}
+                              <code>{trigger.name ?? trigger.schedule ?? 'unnamed'}</code>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </td>
+                    <td className="subtle">n/a</td>
+                    <td className="subtle">n/a</td>
+                  </tr>
+                ))}
             </tbody>
           </table>
         </div>

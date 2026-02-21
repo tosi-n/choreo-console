@@ -69,7 +69,7 @@ export function RunsPage() {
                   <div className="table-empty">
                     <p>No results were found.</p>
                     <p className="subtle">
-                      Waiting on backend <code>GET /runs</code> endpoint.
+                      This Choreo build does not expose <code>GET /runs</code>; use Run ID quick open.
                     </p>
                   </div>
                 </td>
@@ -80,17 +80,19 @@ export function RunsPage() {
       </article>
 
       <aside className="side-note">
-        <h3>Table columns</h3>
+        <h3>Current API surface</h3>
         <ul>
-          <li>Status</li>
-          <li>Run ID</li>
-          <li>Trigger</li>
-          <li>Function</li>
-          <li>Queued at</li>
-          <li>Ended at</li>
+          <li>
+            <code>GET /runs/:id</code>
+          </li>
+          <li>
+            <code>GET /runs/:id/steps</code>
+          </li>
+          <li>
+            <code>POST /runs/:id/cancel</code>
+          </li>
         </ul>
       </aside>
     </section>
   )
 }
-

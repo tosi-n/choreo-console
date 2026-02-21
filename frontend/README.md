@@ -38,6 +38,12 @@ Notes:
 ## Available Backend Calls (typed)
 
 - `GET /health`
+- `GET /functions`
+- `POST /events`
 - `GET /runs/:id`
 - `GET /runs/:id/steps`
 - `POST /runs/:id/cancel`
+
+Current backend note (`ghcr.io/tosi-n/choreo:0.1.4`):
+
+- Run and event list endpoints (`GET /runs`, `GET /events`) are not exposed in this image.

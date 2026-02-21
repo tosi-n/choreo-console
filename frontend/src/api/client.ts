@@ -1,11 +1,15 @@
 import { z } from 'zod'
 
 import {
+  functionsResponseSchema,
   healthResponseSchema,
   runResponseSchema,
   runStepsResponseSchema,
+  sendEventResponseSchema,
+  type FunctionDefinition,
   type HealthResponse,
   type RunResponse,
+  type SendEventResponse,
   type StepResponse,
 } from './schemas'
 
@@ -21,6 +25,13 @@ export class ChoreoApiError extends Error {
 
 type ChoreoClientOptions = {
   baseUrl?: string
+}
+
+export type SendEventInput = {
+  name: string
+  data: Record<string, unknown>
+  idempotency_key?: string
+  user_id?: string
 }
 
 function ensureTrailingSlash(value: string): string {
@@ -84,9 +95,12 @@ export function createChoreoClient(options: ChoreoClientOptions = {}) {
 
   return {
     getHealth: () => request('/health', { method: 'GET' }, healthResponseSchema),
+    getFunctions: () => request('/functions', { method: 'GET' }, functionsResponseSchema),
     getRun: (runId: string) => request(`/runs/${runId}`, { method: 'GET' }, runResponseSchema),
     getRunSteps: (runId: string) =>
       request(`/runs/${runId}/steps`, { method: 'GET' }, runStepsResponseSchema),
+    sendEvent: (input: SendEventInput) =>
+      request('/events', { method: 'POST', body: JSON.stringify(input) }, sendEventResponseSchema),
     cancelRun: (runId: string) =>
       request(`/runs/${runId}/cancel`, { method: 'POST', body: JSON.stringify({}) }, runResponseSchema),
     config: {
@@ -97,4 +111,4 @@ export function createChoreoClient(options: ChoreoClientOptions = {}) {
 
 export const choreoClient = createChoreoClient()
 
-export type { HealthResponse, RunResponse, StepResponse }
+export type { FunctionDefinition, HealthResponse, RunResponse, SendEventResponse, StepResponse }
