@@ -2,9 +2,8 @@ import { useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
-import { choreoClient } from '../api/client'
+import { ChoreoApiError, choreoClient } from '../api/client'
 import { useStimulirTracesQuery, useStimulirWorkerStatusQuery } from '../features/stimulir/queries'
-import { getInitialStimulirToken, persistStimulirToken } from '../lib/stimulir-auth'
 
 const MAX_ROWS = 100
 
@@ -58,19 +57,19 @@ function statusClassName(status: string): string {
 export function RunsPage() {
   const navigate = useNavigate()
   const [runIdInput, setRunIdInput] = useState('')
-  const [stimulirToken, setStimulirToken] = useState(getInitialStimulirToken)
   const [statusFilter, setStatusFilter] = useState('all')
   const [providerFilter, setProviderFilter] = useState('all')
   const [searchFilter, setSearchFilter] = useState('')
 
   const traces = useStimulirTracesQuery({
-    token: stimulirToken,
     status: statusFilter,
     modelProvider: providerFilter,
     limit: MAX_ROWS,
     offset: 0,
   })
-  const workerStatus = useStimulirWorkerStatusQuery(stimulirToken)
+  const workerStatus = useStimulirWorkerStatusQuery()
+
+  const tracesErrorStatus = traces.error instanceof ChoreoApiError ? traces.error.status : undefined
 
   const filteredRows = useMemo(() => {
     const data = traces.data ?? []
@@ -102,30 +101,15 @@ export function RunsPage() {
     navigate(`/runs/${encodeURIComponent(trimmed)}`)
   }
 
-  function onSaveToken() {
-    persistStimulirToken(stimulirToken)
-    void traces.refetch()
-    void workerStatus.refetch()
-  }
-
-  function onClearToken() {
-    setStimulirToken('')
-    persistStimulirToken('')
-  }
-
-  const dataSourceLabel = stimulirToken
-    ? `Stimulir API ${choreoClient.config.stimulirBaseUrl}`
-    : 'Choreo API (run list unavailable in current image)'
-
   return (
     <section className="control-page">
       <header className="page-toolbar">
         <h1>Runs</h1>
         <div className="toolbar-actions">
-          <button className="ghost-btn" type="button" onClick={() => traces.refetch()} disabled={!stimulirToken}>
+          <button className="ghost-btn" type="button" onClick={() => traces.refetch()}>
             Refresh runs
           </button>
-          <button className="ghost-btn" type="button" onClick={() => workerStatus.refetch()} disabled={!stimulirToken}>
+          <button className="ghost-btn" type="button" onClick={() => workerStatus.refetch()}>
             Refresh worker
           </button>
         </div>
@@ -133,7 +117,7 @@ export function RunsPage() {
 
       <div className="status-strip">
         <span>
-          Source <strong>{dataSourceLabel}</strong>
+          Source <strong>{choreoClient.config.stimulirBaseUrl}</strong>
         </span>
         {workerStatus.data && (
           <>
@@ -152,32 +136,6 @@ export function RunsPage() {
           </>
         )}
       </div>
-
-      <article className="panel">
-        <header className="panel-header">
-          <h3>Stimulir API Token</h3>
-          <span className="subtle">Required for real historical run data</span>
-        </header>
-        <div className="token-row">
-          <input
-            type="password"
-            placeholder="Paste JWT or Bearer token"
-            value={stimulirToken}
-            onChange={(event) => setStimulirToken(event.target.value)}
-          />
-          <button className="mini-btn" type="button" onClick={onSaveToken}>
-            Save token
-          </button>
-          <button className="ghost-btn" type="button" onClick={onClearToken}>
-            Clear
-          </button>
-        </div>
-        {!stimulirToken && (
-          <p className="subtle token-hint">
-            Without token, <code>GET /api/v1/admin/traces</code> and <code>GET /api/v1/worker/status</code> return 401.
-          </p>
-        )}
-      </article>
 
       <form className="filter-row" onSubmit={onQuickOpen}>
         <input
@@ -222,37 +180,32 @@ export function RunsPage() {
               </tr>
             </thead>
             <tbody>
-              {!stimulirToken && (
+              {traces.isLoading && (
                 <tr>
                   <td colSpan={6}>
                     <div className="table-empty">
-                      <p>Provide a Stimulir token to load historical runs.</p>
-                      <p className="subtle">
-                        Current Choreo image supports run detail endpoints, not run list endpoint.
-                      </p>
+                      <p>Loading historical runs...</p>
                     </div>
                   </td>
                 </tr>
               )}
-              {stimulirToken && traces.isLoading && (
+              {traces.isError && (
                 <tr>
                   <td colSpan={6}>
                     <div className="table-empty">
-                      <p>Loading runs from Stimulir traces...</p>
+                      <p>Could not load runs from Stimulir traces.</p>
+                      {tracesErrorStatus === 401 ? (
+                        <p className="subtle">
+                          Endpoint is protected in this environment.
+                        </p>
+                      ) : (
+                        <p className="subtle">Check Stimulir backend availability on <code>{choreoClient.config.stimulirBaseUrl}</code>.</p>
+                      )}
                     </div>
                   </td>
                 </tr>
               )}
-              {stimulirToken && traces.isError && (
-                <tr>
-                  <td colSpan={6}>
-                    <div className="table-empty">
-                      <p>Could not load runs. Check token and API base URL.</p>
-                    </div>
-                  </td>
-                </tr>
-              )}
-              {stimulirToken && !traces.isLoading && !traces.isError && filteredRows.length === 0 && (
+              {!traces.isLoading && !traces.isError && filteredRows.length === 0 && (
                 <tr>
                   <td colSpan={6}>
                     <div className="table-empty">
@@ -261,8 +214,7 @@ export function RunsPage() {
                   </td>
                 </tr>
               )}
-              {stimulirToken &&
-                !traces.isLoading &&
+              {!traces.isLoading &&
                 !traces.isError &&
                 filteredRows.map((trace) => (
                   <tr key={trace.id}>

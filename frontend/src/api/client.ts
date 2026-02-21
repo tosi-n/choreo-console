@@ -112,7 +112,7 @@ export type StimulirTracesParams = {
 export function createChoreoClient(options: ChoreoClientOptions = {}) {
   const baseUrl = options.baseUrl ?? import.meta.env.VITE_CHOREO_BASE_URL ?? '/api'
   const stimulirBaseUrl =
-    options.stimulirBaseUrl ?? import.meta.env.VITE_STIMULIR_BASE_URL ?? 'http://localhost:8000/api/v1'
+    options.stimulirBaseUrl ?? import.meta.env.VITE_STIMULIR_BASE_URL ?? '/stimulir-api'
   const stimulirAuthToken = options.stimulirAuthToken ?? import.meta.env.VITE_STIMULIR_AUTH_TOKEN ?? ''
 
   async function request<T>(

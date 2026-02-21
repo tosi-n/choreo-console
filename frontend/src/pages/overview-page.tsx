@@ -1,23 +1,20 @@
 import type { CSSProperties } from 'react'
 import { useMemo } from 'react'
 
-import { choreoClient } from '../api/client'
+import { ChoreoApiError, choreoClient } from '../api/client'
 import { useFunctionsQuery } from '../features/functions/queries'
 import { useHealthQuery } from '../features/health/queries'
 import { useStimulirTracesQuery, useStimulirWorkerStatusQuery } from '../features/stimulir/queries'
-import { getInitialStimulirToken } from '../lib/stimulir-auth'
 
 export function OverviewPage() {
   const health = useHealthQuery()
   const functions = useFunctionsQuery()
-  const stimulirToken = getInitialStimulirToken()
   const traces = useStimulirTracesQuery({
-    token: stimulirToken,
     status: 'all',
     modelProvider: 'all',
     limit: 100,
   })
-  const workerStatus = useStimulirWorkerStatusQuery(stimulirToken)
+  const workerStatus = useStimulirWorkerStatusQuery()
 
   const healthStatus = health.isSuccess ? health.data.status : 'unreachable'
   const databaseStatus = health.isSuccess ? health.data.database : 'unknown'
@@ -37,6 +34,8 @@ export function OverviewPage() {
     0,
   )
   const totalTriggers = eventTriggerCount + scheduleTriggerCount + otherTriggerCount
+  const tracesErrorStatus = traces.error instanceof ChoreoApiError ? traces.error.status : undefined
+  const hasTraceMetrics = traces.isSuccess
 
   const traceStats = useMemo(() => {
     const data = traces.data ?? []
@@ -64,19 +63,17 @@ export function OverviewPage() {
     return stats
   }, [traces.data])
 
-  const primaryTotal = stimulirToken ? traceStats.total : totalTriggers
-  const segmentA = primaryTotal > 0 ? ((stimulirToken ? traceStats.completed : eventTriggerCount) / primaryTotal) * 100 : 34
-  const segmentBValue = primaryTotal > 0 ? ((stimulirToken ? traceStats.running : scheduleTriggerCount) / primaryTotal) * 100 : 33
+  const primaryTotal = hasTraceMetrics ? traceStats.total : totalTriggers
+  const segmentA = primaryTotal > 0 ? ((hasTraceMetrics ? traceStats.completed : eventTriggerCount) / primaryTotal) * 100 : 34
+  const segmentBValue = primaryTotal > 0 ? ((hasTraceMetrics ? traceStats.running : scheduleTriggerCount) / primaryTotal) * 100 : 33
   const segmentAEnd = `${segmentA.toFixed(2)}%`
   const segmentBEnd = `${(segmentA + segmentBValue).toFixed(2)}%`
 
   function refreshPageData() {
     void health.refetch()
     void functions.refetch()
-    if (stimulirToken) {
-      void traces.refetch()
-      void workerStatus.refetch()
-    }
+    void traces.refetch()
+    void workerStatus.refetch()
   }
 
   return (
@@ -117,9 +114,14 @@ export function OverviewPage() {
         </span>
         <span>
           Runs source{' '}
-          <strong>{stimulirToken ? choreoClient.config.stimulirBaseUrl : 'configure Stimulir token in Runs tab'}</strong>
+          <strong>{choreoClient.config.stimulirBaseUrl}</strong>
         </span>
       </div>
+      {tracesErrorStatus === 401 && (
+        <div className="callout-error">
+          Stimulir run metrics endpoint is protected in this environment.
+        </div>
+      )}
 
       {health.isError && (
         <div className="callout-error">Backend unavailable. Could not reach {choreoClient.config.baseUrl}.</div>
@@ -130,15 +132,15 @@ export function OverviewPage() {
         <div className="card-grid two-up">
           <article className="panel">
             <header className="panel-header">
-              <h3>{stimulirToken ? 'Run Status Mix' : 'Functions Coverage'}</h3>
+              <h3>{hasTraceMetrics ? 'Run Status Mix' : 'Functions Coverage'}</h3>
             </header>
             <div className="donut-wrap">
               <div className="donut" style={{ '--seg-a-end': segmentAEnd, '--seg-b-end': segmentBEnd } as CSSProperties}>
-                <span>{stimulirToken ? 'Total runs' : 'Total functions'}</span>
-                <strong>{stimulirToken ? traceStats.total : totalFunctions}</strong>
+                <span>{hasTraceMetrics ? 'Total runs' : 'Total functions'}</span>
+                <strong>{hasTraceMetrics ? traceStats.total : totalFunctions}</strong>
               </div>
               <ul className="legend-list">
-                {stimulirToken ? (
+                {hasTraceMetrics ? (
                   <>
                     <li>Completed {traceStats.completed}</li>
                     <li>Running {traceStats.running}</li>
@@ -160,22 +162,22 @@ export function OverviewPage() {
           </article>
           <article className="panel">
             <header className="panel-header">
-              <h3>{stimulirToken ? 'Recent Runs' : 'Registered Functions'}</h3>
+              <h3>{hasTraceMetrics ? 'Recent Runs' : 'Registered Functions'}</h3>
               <button
                 className="mini-btn"
                 type="button"
-                onClick={() => (stimulirToken ? traces.refetch() : functions.refetch())}
+                onClick={() => (hasTraceMetrics ? traces.refetch() : functions.refetch())}
               >
                 Refresh
               </button>
             </header>
             <div className="overview-list">
-              {stimulirToken ? (
+              {hasTraceMetrics ? (
                 <>
                   {traces.isLoading && <p className="subtle">Loading trace runs...</p>}
                   {traces.isError && (
                     <p className="subtle">
-                      Could not load <code>GET /api/v1/admin/traces</code>; check token in Runs tab.
+                      Could not load <code>GET /api/v1/admin/traces</code>.
                     </p>
                   )}
                   {!traces.isLoading && !traces.isError && traceStats.total === 0 && (
@@ -229,22 +231,22 @@ export function OverviewPage() {
         <div className="card-grid two-up">
           <article className="panel">
             <header className="panel-header">
-              <h3>{stimulirToken ? 'Worker Queue' : 'Event-triggered Functions'}</h3>
+              <h3>{hasTraceMetrics ? 'Worker Queue' : 'Event-triggered Functions'}</h3>
             </header>
             <div className="chart-placeholder">
               <div className="metric-stack">
-                <strong>{stimulirToken ? (workerStatus.data?.tasks_queued ?? '—') : eventTriggerCount}</strong>
-                <span>{stimulirToken ? 'Queued tasks in worker' : 'Functions listening to events'}</span>
+                <strong>{hasTraceMetrics ? (workerStatus.data?.tasks_queued ?? '—') : eventTriggerCount}</strong>
+                <span>{hasTraceMetrics ? 'Queued tasks in worker' : 'Functions listening to events'}</span>
               </div>
             </div>
           </article>
           <article className="panel">
             <header className="panel-header">
-              <h3>{stimulirToken ? 'Worker Execution' : 'Endpoint Availability'}</h3>
+              <h3>{hasTraceMetrics ? 'Worker Execution' : 'Endpoint Availability'}</h3>
             </header>
             <div className="chart-placeholder">
               <div className="metric-stack">
-                {stimulirToken ? (
+                {hasTraceMetrics ? (
                   <>
                     <strong>{workerStatus.data?.tasks_executing ?? '—'}</strong>
                     <span>Active task executions</span>

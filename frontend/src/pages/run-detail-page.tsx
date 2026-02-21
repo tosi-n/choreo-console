@@ -3,7 +3,6 @@ import { Link, useParams } from 'react-router-dom'
 
 import { useCancelRunMutation, useRunQuery, useRunStepsQuery } from '../features/runs/queries'
 import { useStimulirTraceDetailQuery } from '../features/stimulir/queries'
-import { getInitialStimulirToken } from '../lib/stimulir-auth'
 
 function JsonBox(props: { value: unknown }) {
   return <pre className="json-box">{JSON.stringify(props.value, null, 2)}</pre>
@@ -35,12 +34,10 @@ export function RunDetailPage() {
     }
   }, [runIdParam])
 
-  const stimulirToken = getInitialStimulirToken()
-
   const run = useRunQuery(runId)
   const steps = useRunStepsQuery(runId)
   const cancelRun = useCancelRunMutation(runId)
-  const stimulirTrace = useStimulirTraceDetailQuery(runId, stimulirToken, run.isError || !runId)
+  const stimulirTrace = useStimulirTraceDetailQuery(runId, undefined, run.isError || !runId)
 
   const showChoreoRun = Boolean(run.data)
   const showStimulirTrace = !showChoreoRun && Boolean(stimulirTrace.data)
@@ -71,7 +68,7 @@ export function RunDetailPage() {
       </p>
 
       {!showChoreoRun && run.isLoading && <div className="panel">Loading choreo run...</div>}
-      {!showChoreoRun && stimulirToken && stimulirTrace.isLoading && <div className="panel">Loading stimulir trace...</div>}
+      {!showChoreoRun && stimulirTrace.isLoading && <div className="panel">Loading stimulir trace...</div>}
 
       {showChoreoRun && (
         <>
@@ -183,12 +180,9 @@ export function RunDetailPage() {
         </>
       )}
 
-      {!showChoreoRun && !showStimulirTrace && run.isError && (!stimulirToken || stimulirTrace.isError) && (
+      {!showChoreoRun && !showStimulirTrace && run.isError && stimulirTrace.isError && (
         <div className="callout-error">
           ID not found in Choreo run endpoints or Stimulir trace endpoints.
-          {!stimulirToken && (
-            <span className="subtle"> Add a Stimulir API token on the Runs page to resolve authenticated traces.</span>
-          )}
         </div>
       )}
     </section>
