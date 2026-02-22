@@ -2,7 +2,6 @@ import { useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { useCancelRunMutation, useRunQuery, useRunStepsQuery } from '../features/runs/queries'
-import { useStimulirTraceDetailQuery } from '../features/stimulir/queries'
 
 function JsonBox(props: { value: unknown }) {
   return <pre className="json-box">{JSON.stringify(props.value, null, 2)}</pre>
@@ -12,12 +11,10 @@ function formatDate(value: string | null | undefined): string {
   if (!value) {
     return '—'
   }
-
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) {
     return value
   }
-
   return date.toLocaleString()
 }
 
@@ -37,10 +34,6 @@ export function RunDetailPage() {
   const run = useRunQuery(runId)
   const steps = useRunStepsQuery(runId)
   const cancelRun = useCancelRunMutation(runId)
-  const stimulirTrace = useStimulirTraceDetailQuery(runId, undefined, run.isError || !runId)
-
-  const showChoreoRun = Boolean(run.data)
-  const showStimulirTrace = !showChoreoRun && Boolean(stimulirTrace.data)
 
   return (
     <section className="control-page">
@@ -64,13 +57,13 @@ export function RunDetailPage() {
       </header>
 
       <p className="subtle">
-        Run/Trace ID <code>{runId ?? 'missing run id'}</code>
+        Run ID <code>{runId ?? 'missing run id'}</code>
       </p>
 
-      {!showChoreoRun && run.isLoading && <div className="panel">Loading choreo run...</div>}
-      {!showChoreoRun && stimulirTrace.isLoading && <div className="panel">Loading stimulir trace...</div>}
+      {run.isLoading && <div className="panel">Loading run...</div>}
+      {run.isError && <div className="callout-error">Run not found in <code>GET /runs/:id</code>.</div>}
 
-      {showChoreoRun && (
+      {run.data && (
         <>
           <div className="split-grid">
             <article className="panel">
@@ -82,6 +75,12 @@ export function RunDetailPage() {
                 <dd>{run.data.status}</dd>
                 <dt>Function</dt>
                 <dd>{run.data.function_id}</dd>
+                <dt>Event ID</dt>
+                <dd>
+                  <Link className="run-link" to={`/events/${encodeURIComponent(run.data.event_id)}`}>
+                    {run.data.event_id}
+                  </Link>
+                </dd>
                 <dt>Queued at</dt>
                 <dd>{formatDate(run.data.created_at)}</dd>
                 <dt>Started at</dt>
@@ -97,14 +96,8 @@ export function RunDetailPage() {
 
             <article className="panel">
               <header className="panel-header">
-                <h3>Trigger details</h3>
+                <h3>Input payload</h3>
               </header>
-              <dl className="run-meta">
-                <dt>Event ID</dt>
-                <dd>{run.data.event_id}</dd>
-                <dt>Input payload</dt>
-                <dd />
-              </dl>
               <JsonBox value={run.data.input} />
             </article>
           </div>
@@ -119,7 +112,7 @@ export function RunDetailPage() {
                 <h3>Run timeline</h3>
               </header>
               {steps.data.length === 0 ? (
-                <p className="subtle">No recorded steps.</p>
+                <p className="subtle panel-body">No recorded steps.</p>
               ) : (
                 <div className="timeline">
                   {steps.data.map((step, index) => (
@@ -147,43 +140,6 @@ export function RunDetailPage() {
             </article>
           )}
         </>
-      )}
-
-      {showStimulirTrace && (
-        <>
-          <div className="split-grid">
-            <article className="panel">
-              <header className="panel-header">
-                <h3>Stimulir trace</h3>
-              </header>
-              <dl className="run-meta">
-                <dt>Status</dt>
-                <dd>{stimulirTrace.data?.trace?.status ?? 'unknown'}</dd>
-                <dt>Provider</dt>
-                <dd>{stimulirTrace.data?.trace?.model_provider ?? '—'}</dd>
-                <dt>Title</dt>
-                <dd>{stimulirTrace.data?.trace?.title ?? '—'}</dd>
-                <dt>Started at</dt>
-                <dd>{formatDate(stimulirTrace.data?.trace?.started_at)}</dd>
-                <dt>Completed at</dt>
-                <dd>{formatDate(stimulirTrace.data?.trace?.completed_at)}</dd>
-              </dl>
-            </article>
-
-            <article className="panel">
-              <header className="panel-header">
-                <h3>Stimulir payload</h3>
-              </header>
-              <JsonBox value={stimulirTrace.data} />
-            </article>
-          </div>
-        </>
-      )}
-
-      {!showChoreoRun && !showStimulirTrace && run.isError && stimulirTrace.isError && (
-        <div className="callout-error">
-          ID not found in Choreo run endpoints or Stimulir trace endpoints.
-        </div>
       )}
     </section>
   )

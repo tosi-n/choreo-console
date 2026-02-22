@@ -1,5 +1,6 @@
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 
+import { EventDetailPage } from './pages/event-detail-page'
 import { EventsPage } from './pages/events-page'
 import { FunctionsPage } from './pages/functions-page'
 import { NotFoundPage } from './pages/not-found-page'
@@ -69,6 +70,7 @@ function App() {
             <Route path="/runs" element={<RunsPage />} />
             <Route path="/runs/:runId" element={<RunDetailPage />} />
             <Route path="/events" element={<EventsPage />} />
+            <Route path="/events/:eventId" element={<EventDetailPage />} />
             <Route path="/functions" element={<FunctionsPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>

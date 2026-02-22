@@ -2,41 +2,47 @@ import { useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
-import { ChoreoApiError, choreoClient } from '../api/client'
-import { useStimulirTracesQuery, useStimulirWorkerStatusQuery } from '../features/stimulir/queries'
+import { useFunctionsQuery } from '../features/functions/queries'
+import { useCancelRunMutation, useRunsQuery } from '../features/runs/queries'
 
-const MAX_ROWS = 100
+const DEFAULT_ROWS = 200
+
+function toTimestamp(value: string | null | undefined): number {
+  if (!value) {
+    return 0
+  }
+  const parsed = new Date(value).getTime()
+  return Number.isFinite(parsed) ? parsed : 0
+}
 
 function formatDate(value: string | null | undefined): string {
   if (!value) {
     return '—'
   }
-
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) {
     return value
   }
-
   return date.toLocaleString()
 }
 
-function formatDuration(durationMs: number | null | undefined): string {
-  if (!durationMs || durationMs <= 0) {
+function formatDuration(startedAt: string | null | undefined, endedAt: string | null | undefined): string {
+  const start = toTimestamp(startedAt)
+  const end = toTimestamp(endedAt)
+  if (start <= 0 || end <= 0 || end < start) {
     return '—'
   }
-
+  const durationMs = end - start
   if (durationMs < 1_000) {
     return `${durationMs}ms`
   }
-
   const seconds = Math.floor(durationMs / 1_000)
   if (seconds < 60) {
     return `${seconds}s`
   }
-
   const minutes = Math.floor(seconds / 60)
-  const remainingSeconds = seconds % 60
-  return `${minutes}m ${remainingSeconds}s`
+  const remaining = seconds % 60
+  return `${minutes}m ${remaining}s`
 }
 
 function statusClassName(status: string): string {
@@ -54,43 +60,54 @@ function statusClassName(status: string): string {
   }
 }
 
+function canCancel(status: string): boolean {
+  const normalized = status.toLowerCase()
+  return normalized === 'queued' || normalized === 'running'
+}
+
+function RunsRowActions(props: { runId: string; status: string }) {
+  const cancel = useCancelRunMutation(props.runId)
+  const disabled = !canCancel(props.status) || cancel.isPending
+
+  return (
+    <button className="mini-btn" type="button" disabled={disabled} onClick={() => cancel.mutate()}>
+      {cancel.isPending ? 'Cancelling...' : 'Cancel'}
+    </button>
+  )
+}
+
 export function RunsPage() {
   const navigate = useNavigate()
+  const functions = useFunctionsQuery()
+
   const [runIdInput, setRunIdInput] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [providerFilter, setProviderFilter] = useState('all')
+  const [functionFilter, setFunctionFilter] = useState('all')
   const [searchFilter, setSearchFilter] = useState('')
+  const [rowLimit, setRowLimit] = useState(DEFAULT_ROWS)
 
-  const traces = useStimulirTracesQuery({
-    status: statusFilter,
-    modelProvider: providerFilter,
-    limit: MAX_ROWS,
+  const runs = useRunsQuery({
+    status: statusFilter === 'all' ? undefined : statusFilter,
+    functionId: functionFilter === 'all' ? undefined : functionFilter,
+    limit: rowLimit,
     offset: 0,
   })
-  const workerStatus = useStimulirWorkerStatusQuery()
 
-  const tracesErrorStatus = traces.error instanceof ChoreoApiError ? traces.error.status : undefined
+  const functionOptions = useMemo(
+    () => (functions.data ?? []).map((fn) => fn.id).sort((a, b) => a.localeCompare(b)),
+    [functions.data],
+  )
 
   const filteredRows = useMemo(() => {
-    const data = traces.data ?? []
     const term = searchFilter.trim().toLowerCase()
-
+    const rows = runs.data ?? []
     if (!term) {
-      return data
+      return rows
     }
-
-    return data.filter((trace) => {
-      return [
-        trace.id,
-        trace.task_id ?? '',
-        trace.durable_session_id ?? '',
-        trace.title ?? '',
-        trace.context_type ?? '',
-        trace.model_provider ?? '',
-        trace.status,
-      ].some((value) => value.toLowerCase().includes(term))
+    return rows.filter((run) => {
+      return [run.id, run.event_id, run.function_id, run.status].some((value) => value.toLowerCase().includes(term))
     })
-  }, [searchFilter, traces.data])
+  }, [runs.data, searchFilter])
 
   function onQuickOpen(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -106,65 +123,62 @@ export function RunsPage() {
       <header className="page-toolbar">
         <h1>Runs</h1>
         <div className="toolbar-actions">
-          <button className="ghost-btn" type="button" onClick={() => traces.refetch()}>
+          <button className="ghost-btn" type="button" onClick={() => runs.refetch()}>
             Refresh runs
-          </button>
-          <button className="ghost-btn" type="button" onClick={() => workerStatus.refetch()}>
-            Refresh worker
           </button>
         </div>
       </header>
-
-      <div className="status-strip">
-        <span>
-          Source <strong>{choreoClient.config.stimulirBaseUrl}</strong>
-        </span>
-        {workerStatus.data && (
-          <>
-            <span>
-              Worker <strong>{workerStatus.data.worker_running ? 'running' : 'stopped'}</strong>
-            </span>
-            <span>
-              Orchestrator <strong>{workerStatus.data.orchestrator}</strong>
-            </span>
-            <span>
-              Queued <strong>{workerStatus.data.tasks_queued}</strong>
-            </span>
-            <span>
-              Executing <strong>{workerStatus.data.tasks_executing}</strong>
-            </span>
-          </>
-        )}
-      </div>
 
       <form className="filter-row" onSubmit={onQuickOpen}>
         <input
           id="run-id-input"
           value={runIdInput}
           onChange={(event) => setRunIdInput(event.target.value)}
-          placeholder="Run or trace ID (quick open)"
+          placeholder="Run ID (quick open)"
         />
         <input
           value={searchFilter}
           onChange={(event) => setSearchFilter(event.target.value)}
-          placeholder="Filter rows by status, provider, title, ID"
+          placeholder="Filter by run/event/function/status"
         />
         <select className="filter-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
           <option value="all">Status: All</option>
+          <option value="queued">Status: Queued</option>
           <option value="running">Status: Running</option>
           <option value="completed">Status: Completed</option>
           <option value="failed">Status: Failed</option>
           <option value="cancelled">Status: Cancelled</option>
         </select>
-        <select className="filter-select" value={providerFilter} onChange={(event) => setProviderFilter(event.target.value)}>
-          <option value="all">Provider: All</option>
-          <option value="research_worker">research_worker</option>
-          <option value="bookkeeper_worker">bookkeeper_worker</option>
+        <select className="filter-select" value={functionFilter} onChange={(event) => setFunctionFilter(event.target.value)}>
+          <option value="all">Function: All</option>
+          {functionOptions.map((functionId) => (
+            <option key={functionId} value={functionId}>
+              {functionId}
+            </option>
+          ))}
+        </select>
+        <select
+          className="filter-select"
+          value={String(rowLimit)}
+          onChange={(event) => setRowLimit(Number.parseInt(event.target.value, 10))}
+        >
+          <option value="100">Rows: 100</option>
+          <option value="200">Rows: 200</option>
+          <option value="500">Rows: 500</option>
         </select>
         <button className="mini-btn" type="submit">
           Open ID
         </button>
       </form>
+
+      <div className="status-strip">
+        <span>
+          Showing <strong>{filteredRows.length}</strong> of <strong>{runs.data?.length ?? 0}</strong> loaded runs
+        </span>
+        <span>
+          Filters <strong>{statusFilter}</strong> / <strong>{functionFilter}</strong>
+        </span>
+      </div>
 
       <article className="panel">
         <div className="table-wrap">
@@ -173,63 +187,66 @@ export function RunsPage() {
               <tr>
                 <th>Status</th>
                 <th>Run ID</th>
-                <th>Trigger</th>
+                <th>Event</th>
                 <th>Function</th>
                 <th>Queued at</th>
                 <th>Ended at</th>
+                <th>Duration</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
-              {traces.isLoading && (
+              {runs.isLoading && (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={8}>
                     <div className="table-empty">
-                      <p>Loading historical runs...</p>
+                      <p>Loading runs...</p>
                     </div>
                   </td>
                 </tr>
               )}
-              {traces.isError && (
+              {runs.isError && (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={8}>
                     <div className="table-empty">
-                      <p>Could not load runs from Stimulir traces.</p>
-                      {tracesErrorStatus === 401 ? (
-                        <p className="subtle">
-                          Endpoint is protected in this environment.
-                        </p>
-                      ) : (
-                        <p className="subtle">Check Stimulir backend availability on <code>{choreoClient.config.stimulirBaseUrl}</code>.</p>
-                      )}
+                      <p>Could not load runs from <code>GET /runs</code>.</p>
                     </div>
                   </td>
                 </tr>
               )}
-              {!traces.isLoading && !traces.isError && filteredRows.length === 0 && (
+              {!runs.isLoading && !runs.isError && filteredRows.length === 0 && (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={8}>
                     <div className="table-empty">
                       <p>No runs match current filters.</p>
                     </div>
                   </td>
                 </tr>
               )}
-              {!traces.isLoading &&
-                !traces.isError &&
-                filteredRows.map((trace) => (
-                  <tr key={trace.id}>
+              {!runs.isLoading &&
+                !runs.isError &&
+                filteredRows.map((run) => (
+                  <tr key={run.id}>
                     <td>
-                      <span className={statusClassName(trace.status)}>{trace.status}</span>
+                      <span className={statusClassName(run.status)}>{run.status}</span>
                     </td>
                     <td>
-                      <Link className="run-link" to={`/runs/${encodeURIComponent(trace.id)}`}>
-                        {trace.id}
+                      <Link className="run-link" to={`/runs/${encodeURIComponent(run.id)}`}>
+                        {run.id}
                       </Link>
                     </td>
-                    <td>{trace.context_type ?? '—'}</td>
-                    <td>{trace.title ?? trace.prompt_key ?? trace.model_provider ?? '—'}</td>
-                    <td>{formatDate(trace.created_at)}</td>
-                    <td>{trace.completed_at ? `${formatDate(trace.completed_at)} (${formatDuration(trace.duration_ms)})` : '—'}</td>
+                    <td>
+                      <Link className="run-link" to={`/events/${encodeURIComponent(run.event_id)}`}>
+                        {run.event_id}
+                      </Link>
+                    </td>
+                    <td>{run.function_id}</td>
+                    <td>{formatDate(run.created_at)}</td>
+                    <td>{formatDate(run.ended_at)}</td>
+                    <td>{formatDuration(run.started_at, run.ended_at)}</td>
+                    <td>
+                      <RunsRowActions runId={run.id} status={run.status} />
+                    </td>
                   </tr>
                 ))}
             </tbody>

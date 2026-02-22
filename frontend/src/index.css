@@ -195,7 +195,8 @@ input {
 .workspace-main {
   min-height: 100vh;
   padding: 1rem 1.15rem 1.4rem;
-  max-width: 1300px;
+  max-width: 1400px;
+  width: 100%;
 }
 
 .control-page {
@@ -222,6 +223,15 @@ input {
   display: flex;
   align-items: center;
   gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.toolbar-actions input {
+  min-width: 180px;
+  border: 1px solid var(--border);
+  background: #090d12;
+  border-radius: 8px;
+  padding: 0.44rem 0.65rem;
 }
 
 .ghost-btn,
@@ -263,6 +273,10 @@ input {
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
+}
+
+.filter-row > * {
+  min-height: 38px;
 }
 
 .filter-row input {
@@ -510,7 +524,9 @@ input {
 
 .table-wrap {
   width: 100%;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 
 .data-table {
@@ -566,6 +582,23 @@ input {
   list-style: none;
   display: grid;
   gap: 0.28rem;
+}
+
+.table-chip-list {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.table-chip-link {
+  border: 1px solid var(--border);
+  background: #172536;
+  color: #dce6f4;
+  border-radius: 999px;
+  padding: 0.2rem 0.48rem;
+  font-size: 0.75rem;
+  text-decoration: none;
 }
 
 .run-link {
@@ -716,6 +749,10 @@ input {
   margin: 0;
 }
 
+.panel-body {
+  padding: 0.85rem;
+}
+
 @media (max-width: 1260px) {
   .console-shell {
     grid-template-columns: 204px minmax(0, 1fr);
@@ -797,6 +834,15 @@ input {
     flex-wrap: wrap;
   }
 
+  .toolbar-actions > * {
+    flex: 1 1 180px;
+  }
+
+  .toolbar-actions input {
+    min-width: 0;
+    width: 100%;
+  }
+
   .filter-row input {
     min-width: 0;
     width: 100%;
@@ -824,8 +870,16 @@ input {
     padding: 0.65rem 0.65rem 1rem;
   }
 
+  .page-toolbar h1 {
+    font-size: 1.18rem;
+  }
+
   .donut {
     width: min(70vw, 220px);
+  }
+
+  .data-table {
+    min-width: 600px;
   }
 
   .data-table th,

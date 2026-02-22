@@ -1,21 +1,19 @@
 import { z } from 'zod'
 
 import {
+  eventsResponseSchema,
+  eventResponseSchema,
   functionsResponseSchema,
   healthResponseSchema,
+  runsResponseSchema,
   runResponseSchema,
   runStepsResponseSchema,
   sendEventResponseSchema,
-  stimulirTraceDetailSchema,
-  stimulirTracesResponseSchema,
-  stimulirWorkerStatusSchema,
+  type EventResponse,
   type FunctionDefinition,
   type HealthResponse,
   type RunResponse,
   type SendEventResponse,
-  type StimulirTrace,
-  type StimulirTraceDetail,
-  type StimulirWorkerStatus,
   type StepResponse,
 } from './schemas'
 
@@ -31,8 +29,6 @@ export class ChoreoApiError extends Error {
 
 type ChoreoClientOptions = {
   baseUrl?: string
-  stimulirBaseUrl?: string
-  stimulirAuthToken?: string
 }
 
 export type SendEventInput = {
@@ -40,6 +36,20 @@ export type SendEventInput = {
   data: Record<string, unknown>
   idempotency_key?: string
   user_id?: string
+}
+
+export type RunsParams = {
+  limit?: number
+  offset?: number
+  status?: string
+  function_id?: string
+  event_id?: string
+}
+
+export type EventsParams = {
+  limit?: number
+  offset?: number
+  name?: string
 }
 
 function ensureTrailingSlash(value: string): string {
@@ -86,42 +96,29 @@ function parseErrorMessage(payload: unknown): string {
   return parsed.data.error ?? parsed.data.detail ?? parsed.data.message ?? 'Request failed'
 }
 
-function withOptionalAuthHeader(headers: HeadersInit | undefined, token?: string): HeadersInit {
-  if (!token) {
-    return headers ?? {}
-  }
-
-  const prefixed = token.startsWith('Bearer ') ? token : `Bearer ${token}`
-  return {
-    ...(headers ?? {}),
-    Authorization: prefixed,
-  }
-}
-
 function encodePathSegment(value: string): string {
   return encodeURIComponent(value)
 }
 
-export type StimulirTracesParams = {
-  limit?: number
-  offset?: number
-  status?: string
-  model_provider?: string
+function toQueryString(params: Record<string, string | number | undefined>): string {
+  const query = new URLSearchParams()
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined) {
+      continue
+    }
+    query.set(key, String(value))
+  }
+
+  const encoded = query.toString()
+  return encoded ? `?${encoded}` : ''
 }
 
 export function createChoreoClient(options: ChoreoClientOptions = {}) {
   const baseUrl = options.baseUrl ?? import.meta.env.VITE_CHOREO_BASE_URL ?? '/api'
-  const stimulirBaseUrl =
-    options.stimulirBaseUrl ?? import.meta.env.VITE_STIMULIR_BASE_URL ?? '/stimulir-api'
-  const stimulirAuthToken = options.stimulirAuthToken ?? import.meta.env.VITE_STIMULIR_AUTH_TOKEN ?? ''
 
-  async function request<T>(
-    base: string,
-    path: string,
-    init: RequestInit,
-    schema: z.ZodType<T>,
-  ): Promise<T> {
-    const url = buildRequestUrl(base, path)
+  async function request<T>(path: string, init: RequestInit, schema: z.ZodType<T>): Promise<T> {
+    const url = buildRequestUrl(baseUrl, path)
     const response = await fetch(url, {
       headers: {
         'Content-Type': 'application/json',
@@ -140,67 +137,41 @@ export function createChoreoClient(options: ChoreoClientOptions = {}) {
   }
 
   return {
-    getHealth: () => request(baseUrl, '/health', { method: 'GET' }, healthResponseSchema),
-    getFunctions: () => request(baseUrl, '/functions', { method: 'GET' }, functionsResponseSchema),
-    getRun: (runId: string) => request(baseUrl, `/runs/${runId}`, { method: 'GET' }, runResponseSchema),
+    getHealth: () => request('/health', { method: 'GET' }, healthResponseSchema),
+    getFunctions: () => request('/functions', { method: 'GET' }, functionsResponseSchema),
+    getRun: (runId: string) => request(`/runs/${encodePathSegment(runId)}`, { method: 'GET' }, runResponseSchema),
+    getRuns: (params: RunsParams = {}) =>
+      request(
+        `/runs${toQueryString({
+          limit: params.limit,
+          offset: params.offset,
+          status: params.status,
+          function_id: params.function_id,
+          event_id: params.event_id,
+        })}`,
+        { method: 'GET' },
+        runsResponseSchema,
+      ),
     getRunSteps: (runId: string) =>
-      request(baseUrl, `/runs/${runId}/steps`, { method: 'GET' }, runStepsResponseSchema),
+      request(`/runs/${encodePathSegment(runId)}/steps`, { method: 'GET' }, runStepsResponseSchema),
+    getEvent: (eventId: string) =>
+      request(`/events/${encodePathSegment(eventId)}`, { method: 'GET' }, eventResponseSchema),
+    getEvents: (params: EventsParams = {}) =>
+      request(
+        `/events${toQueryString({
+          limit: params.limit,
+          offset: params.offset,
+          name: params.name,
+        })}`,
+        { method: 'GET' },
+        eventsResponseSchema,
+      ),
     sendEvent: (input: SendEventInput) =>
-      request(baseUrl, '/events', { method: 'POST', body: JSON.stringify(input) }, sendEventResponseSchema),
+      request('/events', { method: 'POST', body: JSON.stringify(input) }, sendEventResponseSchema),
     cancelRun: (runId: string) =>
-      request(baseUrl, `/runs/${runId}/cancel`, { method: 'POST', body: JSON.stringify({}) }, runResponseSchema),
-    getStimulirTraces: (params: StimulirTracesParams = {}, tokenOverride?: string) => {
-      const query = new URLSearchParams()
-      if (typeof params.limit === 'number') {
-        query.set('limit', String(params.limit))
-      }
-      if (typeof params.offset === 'number') {
-        query.set('offset', String(params.offset))
-      }
-      if (params.status) {
-        query.set('status', params.status)
-      }
-      if (params.model_provider) {
-        query.set('model_provider', params.model_provider)
-      }
-
-      const suffix = query.toString()
-      const path = suffix ? `/admin/traces?${suffix}` : '/admin/traces'
-
-      return request(
-        stimulirBaseUrl,
-        path,
-        {
-          method: 'GET',
-          headers: withOptionalAuthHeader(undefined, tokenOverride ?? stimulirAuthToken),
-        },
-        stimulirTracesResponseSchema,
-      )
-    },
-    getStimulirTraceDetail: (traceId: string, tokenOverride?: string) =>
-      request(
-        stimulirBaseUrl,
-        `/admin/traces/${encodePathSegment(traceId)}`,
-        {
-          method: 'GET',
-          headers: withOptionalAuthHeader(undefined, tokenOverride ?? stimulirAuthToken),
-        },
-        stimulirTraceDetailSchema,
-      ),
-    getStimulirWorkerStatus: (tokenOverride?: string) =>
-      request(
-        stimulirBaseUrl,
-        '/worker/status',
-        {
-          method: 'GET',
-          headers: withOptionalAuthHeader(undefined, tokenOverride ?? stimulirAuthToken),
-        },
-        stimulirWorkerStatusSchema,
-      ),
+      request(`/runs/${encodePathSegment(runId)}/cancel`, { method: 'POST', body: JSON.stringify({}) }, runResponseSchema),
     config: {
       baseUrl,
-      stimulirBaseUrl,
-      stimulirConfigured: Boolean(stimulirAuthToken),
     },
   }
 }
@@ -208,12 +179,10 @@ export function createChoreoClient(options: ChoreoClientOptions = {}) {
 export const choreoClient = createChoreoClient()
 
 export type {
+  EventResponse,
   FunctionDefinition,
   HealthResponse,
   RunResponse,
   SendEventResponse,
-  StimulirTrace,
-  StimulirTraceDetail,
-  StimulirWorkerStatus,
   StepResponse,
 }

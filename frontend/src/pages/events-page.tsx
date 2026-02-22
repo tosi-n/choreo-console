@@ -1,18 +1,42 @@
 import { useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
 import { choreoClient } from '../api/client'
+import { useEventsQuery } from '../features/events/queries'
 import { useFunctionsQuery } from '../features/functions/queries'
+import { useRunsQuery } from '../features/runs/queries'
 
 const defaultPayload = '{\n  "source": "choreo-console",\n  "note": "manual test event"\n}'
 
+function formatDate(value: string | null | undefined): string {
+  if (!value) {
+    return '—'
+  }
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return value
+  }
+  return parsed.toLocaleString()
+}
+
 export function EventsPage() {
+  const queryClient = useQueryClient()
   const functions = useFunctionsQuery()
   const [eventName, setEventName] = useState('')
   const [payloadText, setPayloadText] = useState(defaultPayload)
   const [formError, setFormError] = useState<string | null>(null)
+  const [nameFilter, setNameFilter] = useState('')
+  const [searchFilter, setSearchFilter] = useState('')
+  const [rowLimit, setRowLimit] = useState(200)
+
+  const events = useEventsQuery({
+    limit: rowLimit,
+    offset: 0,
+    name: nameFilter.trim() || undefined,
+  })
+  const runs = useRunsQuery({ limit: 500 })
 
   const triggerNames = useMemo(() => {
     const names = new Set<string>()
@@ -28,7 +52,31 @@ export function EventsPage() {
 
   const sendEvent = useMutation({
     mutationFn: (input: { name: string; data: Record<string, unknown> }) => choreoClient.sendEvent(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['events'] })
+      queryClient.invalidateQueries({ queryKey: ['runs'] })
+    },
   })
+
+  const linkedRuns = useMemo(() => {
+    const map = new Map<string, string[]>()
+    for (const run of runs.data ?? []) {
+      const values = map.get(run.event_id) ?? []
+      values.push(run.id)
+      map.set(run.event_id, values)
+    }
+    return map
+  }, [runs.data])
+
+  const filteredEvents = useMemo(() => {
+    const term = searchFilter.trim().toLowerCase()
+    if (!term) {
+      return events.data ?? []
+    }
+    return (events.data ?? []).filter((event) => {
+      return [event.id, event.name].some((value) => value.toLowerCase().includes(term))
+    })
+  }, [events.data, searchFilter])
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -61,8 +109,11 @@ export function EventsPage() {
       <header className="page-toolbar">
         <h1>Events</h1>
         <div className="toolbar-actions">
-          <button className="ghost-btn" type="button" onClick={() => functions.refetch()}>
-            Refresh functions
+          <button className="ghost-btn" type="button" onClick={() => events.refetch()}>
+            Refresh events
+          </button>
+          <button className="ghost-btn" type="button" onClick={() => runs.refetch()}>
+            Refresh runs
           </button>
         </div>
       </header>
@@ -138,13 +189,99 @@ export function EventsPage() {
 
       <article className="panel">
         <header className="panel-header">
-          <h3>List Endpoint Status</h3>
+          <h3>Tracked Events</h3>
+          <div className="toolbar-actions">
+            <input
+              value={nameFilter}
+              onChange={(event) => setNameFilter(event.target.value)}
+              placeholder="Server filter by exact name"
+            />
+            <input
+              value={searchFilter}
+              onChange={(event) => setSearchFilter(event.target.value)}
+              placeholder="Client search by ID/name"
+            />
+            <select
+              className="filter-select"
+              value={String(rowLimit)}
+              onChange={(event) => setRowLimit(Number.parseInt(event.target.value, 10))}
+            >
+              <option value="100">Rows: 100</option>
+              <option value="200">Rows: 200</option>
+              <option value="500">Rows: 500</option>
+            </select>
+          </div>
         </header>
-        <div className="table-empty">
-          <p className="subtle">
-            This Choreo version exposes <code>POST /events</code> and <code>GET /events/:id</code>,
-            but not <code>GET /events</code> list.
-          </p>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Received at</th>
+                <th>Event name</th>
+                <th>Event ID</th>
+                <th>Runs</th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.isLoading && (
+                <tr>
+                  <td colSpan={4}>
+                    <div className="table-empty">
+                      <p>Loading events...</p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              {events.isError && (
+                <tr>
+                  <td colSpan={4}>
+                    <div className="table-empty">
+                      <p>Could not load events from <code>GET /events</code>.</p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              {!events.isLoading && !events.isError && filteredEvents.length === 0 && (
+                <tr>
+                  <td colSpan={4}>
+                    <div className="table-empty">
+                      <p>No events found.</p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              {!events.isLoading &&
+                !events.isError &&
+                filteredEvents.map((event) => {
+                  const runIds = linkedRuns.get(event.id) ?? []
+                  return (
+                    <tr key={event.id}>
+                      <td>{formatDate(event.timestamp)}</td>
+                      <td>{event.name}</td>
+                      <td>
+                        <Link className="run-link" to={`/events/${encodeURIComponent(event.id)}`}>
+                          {event.id}
+                        </Link>
+                      </td>
+                      <td>
+                        {runIds.length === 0 ? (
+                          <span className="subtle">0</span>
+                        ) : (
+                          <div className="table-chip-list">
+                            {runIds.slice(0, 3).map((runId) => (
+                              <Link key={runId} className="table-chip-link" to={`/runs/${encodeURIComponent(runId)}`}>
+                                {runId}
+                              </Link>
+                            ))}
+                            {runIds.length > 3 && <span className="subtle">+{runIds.length - 3} more</span>}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+            </tbody>
+          </table>
         </div>
       </article>
     </section>
